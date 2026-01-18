@@ -2,9 +2,7 @@ import json
 import itertools
 import os
 import sys
-from typing import Dict, Any
 
-import gymnasium as gym
 import wandb
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.callbacks import CallbackList, CheckpointCallback
@@ -18,7 +16,19 @@ from src.algorithms import ALGO_REGISTRY
 def run_single_experiment(cfg: TrainConfig):
     set_random_seed(cfg.seed)
 
-    # 1. Initialize W&B with Grouping
+    # 1. SETUP PATHS
+    # Root for this specific batch of experiments
+    # e.g. ./logs/Initial_Benchmarking/
+    experiment_root = os.path.join(cfg.logs_root_dir, cfg.group_name)
+
+    # Split: Models go to 'models', Logs go to 'tb'
+    model_dir = os.path.join(experiment_root, "models", cfg.run_name())
+    tb_dir = os.path.join(experiment_root, "tb")  # SB3 adds run_name automatically to this
+
+    os.makedirs(model_dir, exist_ok=True)
+    os.makedirs(tb_dir, exist_ok=True)
+
+    # 2. W&B INIT
     run = None
     if cfg.use_wandb:
         run = wandb.init(
@@ -26,14 +36,16 @@ def run_single_experiment(cfg: TrainConfig):
             entity=cfg.wandb_entity,
             config=cfg.__dict__,
             name=cfg.run_name(),
-            group=cfg.group_name,  # Groups runs by Experiment Name
-            job_type=cfg.algo_class,  # Filters by Algo
+            group=cfg.group_name,
+            job_type=cfg.algo_class,
             sync_tensorboard=True,
             monitor_gym=True,
             save_code=True,
         )
 
     print(f"\n---> STARTING RUN: {cfg.run_name()}")
+    print(f"     Model Dir: {model_dir}")
+    print(f"     Tensorboard Dir: {tb_dir}")
 
     env = make_vec_env(cfg.env_id, n_envs=cfg.n_envs, seed=cfg.seed)
 
@@ -41,14 +53,13 @@ def run_single_experiment(cfg: TrainConfig):
         raise ValueError(f"Algorithm '{cfg.algo_class}' not found in registry.")
     AlgoClass = ALGO_REGISTRY[cfg.algo_class]
 
-    # 2. Initialize Model with TensorBoard Hierarchy
     try:
         model = AlgoClass(
             policy=cfg.policy_type,
             env=env,
             policy_kwargs=cfg.policy_kwargs,
-            # Creates subfolders: logs/tb/ExperimentName/RunName
-            tensorboard_log=os.path.join(cfg.tensorboard_log_dir, cfg.group_name),
+            # SB3 will create a subfolder inside 'tb_dir' named after the run
+            tensorboard_log=tb_dir,
             verbose=cfg.verbose,
             device=cfg.device,
             seed=cfg.seed,
@@ -60,42 +71,41 @@ def run_single_experiment(cfg: TrainConfig):
         if run: run.finish()
         sys.exit(1)
 
-    # 3. Callbacks
+    # 3. CALLBACKS & CHECKPOINTS
     callbacks = []
-    save_path = os.path.join(cfg.save_dir, cfg.run_name())
-
     callbacks.append(
         CheckpointCallback(
             save_freq=max(cfg.total_timesteps // 5, 1),
-            save_path=save_path,
-            name_prefix="model",
+            save_path=model_dir,
+            name_prefix="checkpoint",
             save_vecnormalize=True,
         )
     )
 
-    # 4. Save Metadata (Important for Visualization!)
-    os.makedirs(save_path, exist_ok=True)
-    params_path = os.path.join(save_path, "params.json")
+    # 4. SAVE METADATA (params.json)
+    # Important: Save this in the model directory so visualize.py can find it
+    params_path = os.path.join(model_dir, "params.json")
     with open(params_path, "w") as f:
         json.dump(cfg.__dict__, f, indent=4, default=str)
 
-    # 5. Train
+    # 5. TRAIN
     try:
         model.learn(
             total_timesteps=cfg.total_timesteps,
             callback=CallbackList(callbacks),
+            # This name is appended to tb_dir
             tb_log_name=cfg.run_name(),
             log_interval=1000
         )
 
-        # Save Final Model
-        final_model_path = os.path.join(save_path, "final_model")
+        # 6. SAVE FINAL MODEL
+        final_model_path = os.path.join(model_dir, "final_model")
         model.save(final_model_path)
         print(f"Saved final model to: {final_model_path}.zip")
 
-        # Upload to W&B
         if cfg.use_wandb and run:
-            wandb.save(final_model_path + ".zip", base_path=cfg.save_dir)
+            wandb.save(final_model_path + ".zip", base_path=model_dir)
+            wandb.save(params_path, base_path=model_dir)
 
     except Exception as e:
         print(f"Training crashed: {e}")
@@ -151,8 +161,7 @@ def main():
                 device=constants.device,
                 verbose=constants.verbose,
                 n_envs=constants.n_envs,
-                tensorboard_log_dir=constants.tensorboard_log_dir,
-                save_dir=constants.save_dir,
+                logs_root_dir=constants.logs_root_dir,
                 use_wandb=constants.use_wandb,
                 wandb_project=constants.wandb_project,
                 wandb_entity=constants.wandb_entity,

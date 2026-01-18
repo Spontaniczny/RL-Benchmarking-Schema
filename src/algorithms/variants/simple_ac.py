@@ -149,9 +149,13 @@ class SimpleActorCritic(BaseRLSchema):
         # (Simplified for demonstration)
         values, log_prob, entropy = self.policy.evaluate_actions(obs, data["action"])
 
+        values = values.flatten()
+
         # Bootstrapping (Next Value)
         with th.no_grad():
             _, next_values, _ = self.policy(next_obs)
+            next_values = next_values.flatten()
+
             target_value = reward + (1 - done.float()) * self.gamma * next_values
 
         # Calculate Losses
@@ -159,8 +163,10 @@ class SimpleActorCritic(BaseRLSchema):
 
         y_true = target_value.flatten()
         if y_true.numel() > 1:
-            y_pred = values.flatten()
-            var_y = th.var(y_true) if th.var(y_true) > 1e-8 else 1.0
+            y_pred = values
+            var_y = th.var(y_true)
+            if var_y < 1e-8:
+                var_y = 1.0
             explained_var = 1 - th.var(y_true - y_pred) / var_y
         else:
             explained_var = th.tensor(0.0)

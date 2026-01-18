@@ -13,8 +13,7 @@ class FixedConstants:
     device: str
     verbose: int
     n_envs: int
-    tensorboard_log_dir: str
-    save_dir: str
+    logs_root_dir: str
     use_wandb: bool
     wandb_project: str
     wandb_entity: Optional[str]
@@ -52,8 +51,7 @@ class TrainConfig:
     device: str
     verbose: int
     n_envs: int
-    tensorboard_log_dir: str
-    save_dir: str
+    logs_root_dir: str
     use_wandb: bool
     wandb_project: str
     wandb_entity: Optional[str]
