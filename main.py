@@ -153,6 +153,7 @@ def main():
             total_timesteps = run_params.pop("total_timesteps")
             policy_type = run_params.pop("policy_type")
             policy_kwargs = run_params.pop("policy_kwargs")
+            n_envs = run_params.pop("n_envs")
 
             algo_params = run_params
 
@@ -160,13 +161,13 @@ def main():
                 seed=constants.seed,
                 device=constants.device,
                 verbose=constants.verbose,
-                n_envs=constants.n_envs,
                 logs_root_dir=constants.logs_root_dir,
                 use_wandb=constants.use_wandb,
                 wandb_project=constants.wandb_project,
                 wandb_entity=constants.wandb_entity,
 
                 group_name=group_name,
+                n_envs=n_envs,
                 env_id=env_id,
                 algo_class=algo_class,
                 total_timesteps=total_timesteps,

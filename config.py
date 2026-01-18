@@ -12,7 +12,6 @@ class FixedConstants:
     seed: int
     device: str
     verbose: int
-    n_envs: int
     logs_root_dir: str
     use_wandb: bool
     wandb_project: str
@@ -50,7 +49,6 @@ class TrainConfig:
     seed: int
     device: str
     verbose: int
-    n_envs: int
     logs_root_dir: str
     use_wandb: bool
     wandb_project: str
@@ -58,6 +56,7 @@ class TrainConfig:
 
     # From Grid Search JSON
     group_name: str
+    n_envs: int
     env_id: str
     algo_class: str
     total_timesteps: int
@@ -70,10 +69,9 @@ class TrainConfig:
     def run_name(self) -> str:
         """
         Generates a clean, abbreviated run name.
-        Works for ANY parameter name safely.
+        Format: Algo_envN_Params..._sSeed
         """
         # Dictionary of short codes.
-        # If a param isn't here, we just use its full name.
         abbreviations = {
             "learning_rate": "lr",
             "batch_size": "bs",
@@ -86,23 +84,28 @@ class TrainConfig:
             "train_freq": "t_freq",
         }
 
-        # 1. Start with Algo and Env
-        parts = [self.algo_class, self.env_id]
+        # 1. Start with Algo
+        # We removed self.env_id since it is in the parent directory
+        parts = [self.algo_class]
 
-        # 2. Add Dynamic Params
-        # We sort keys so the name is always consistent (lr_0.01_gam_0.99 vs gam_0.99_lr_0.01)
+        # 2. Add n_envs (Critical for batch size context)
+        parts.append(f"env_{self.n_envs}")
+
+        # 3. Add Dynamic Params
         for k in sorted(self.algo_params.keys()):
             v = self.algo_params[k]
-            short_key = abbreviations.get(k, k)  # Fallback to 'k' if unknown
+            short_key = abbreviations.get(k, k)
 
             # Format numbers nicely
             if isinstance(v, float):
-                # If very small, use scientific notation (1e-4), else standard
+                # Use scientific notation for small numbers like 1e-4
                 val_str = f"{v:.0e}" if v < 0.001 else f"{v}"
             else:
                 val_str = str(v)
 
             parts.append(f"{short_key}_{val_str}")
 
+        # 4. Add Seed
         parts.append(f"s_{self.seed}")
+
         return "_".join(parts)

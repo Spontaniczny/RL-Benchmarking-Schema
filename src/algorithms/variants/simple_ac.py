@@ -89,6 +89,8 @@ class SimpleActorCritic(BaseRLSchema):
         # Reset Env
         obs = self.env.reset()
 
+        last_log_time = 0
+
         while self.num_timesteps < total_timesteps:
             # 1. Select Action
             with th.no_grad():
@@ -115,7 +117,7 @@ class SimpleActorCritic(BaseRLSchema):
                 "done": th.as_tensor(dones).to(self.device)
             }
 
-            self.num_timesteps += 1
+            self.num_timesteps += self.env.num_envs
 
             # 4. Train
             self.train()
@@ -123,8 +125,9 @@ class SimpleActorCritic(BaseRLSchema):
             # 5. Callbacks & Logging
             callback.on_step()
 
-            if log_interval is not None and self.num_timesteps % log_interval == 0:
+            if log_interval is not None and (self.num_timesteps - last_log_time >= log_interval):
                 self.dump_logs()
+                last_log_time = self.num_timesteps
 
             obs = new_obs
 
