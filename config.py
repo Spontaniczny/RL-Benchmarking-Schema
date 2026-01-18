@@ -1,47 +1,75 @@
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Type, Union, Optional
+import json
+import os
+from dataclasses import dataclass
+from typing import Any, Dict, Optional
 
 
 @dataclass(frozen=True)
 class FixedConstants:
     """
-    These parameters are CONSTANT across all grid search runs.
+    System-wide constants loaded from JSON.
     """
-    # System Settings
     seed: int
-    device: str  # "cpu", "cuda", "auto"
+    device: str
     verbose: int
-
-    # Paths
+    n_envs: int
     tensorboard_log_dir: str
     save_dir: str
+    use_wandb: bool
+    wandb_project: str
+    wandb_entity: Optional[str]
 
-    # Environment Defaults (can be overridden, but usually fixed per project)
-    n_envs: int
+    @classmethod
+    def from_json(cls, path: str) -> "FixedConstants":
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"Config file not found at: {path}")
+
+        with open(path, "r") as f:
+            data = json.load(f)
+
+        # 1. Check for missing keys (Strictness)
+        required_keys = cls.__annotations__.keys()
+        missing_keys = [k for k in required_keys if k not in data]
+        if missing_keys:
+            raise ValueError(f"config.json is missing keys: {missing_keys}")
+
+        # 2. Instantiate (Strict Type Checking)
+        # We manually check types for critical fields to avoid silent bugs
+        if not isinstance(data["seed"], int):
+            raise TypeError(f"Seed must be int, got {type(data['seed'])}")
+
+        return cls(**data)
 
 
 @dataclass
 class TrainConfig:
     """
-    The Schema for a single training run.
-    Constructed by merging FixedConstants + GridSearch Variables.
+    Combined configuration for a single training run.
+    Merges FixedConstants with the JSON grid search parameters.
     """
     # From FixedConstants
     seed: int
     device: str
-    tensorboard_log_dir: str
-    n_envs: int
     verbose: int
+    n_envs: int
+    tensorboard_log_dir: str
+    save_dir: str
+    use_wandb: bool
+    wandb_project: str
+    wandb_entity: Optional[str]
 
-    # From GridSearch (Variables)
+    # From Grid Search JSON
     env_id: str
+    algo_class: str
     total_timesteps: int
-    learning_rate: float
-    batch_size: int
-    gamma: float
     policy_type: str
     policy_kwargs: Dict[str, Any]
 
-    # Computed / Helper to get a unique run name
+    # Dynamic Algo Params (caught via **kwargs)
+    algo_params: Dict[str, Any]
+
     def run_name(self) -> str:
-        return f"{self.env_id}__lr_{self.learning_rate}__bs_{self.batch_size}__seed_{self.seed}"
+        """Generates a unique name based on key parameters."""
+        # Clean the name to be file-system friendly
+        param_str = "_".join([f"{k}_{v}" for k, v in self.algo_params.items()])
+        return f"{self.algo_class}_{self.env_id}_{param_str}_seed_{self.seed}"
