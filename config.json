@@ -2,9 +2,7 @@
   "seed": 42,
   "device": "cpu",
   "verbose": 1,
-  "n_envs": 1,
-  "tensorboard_log_dir": "./logs/tb/",
-  "save_dir": "./logs/models/",
+  "logs_root_dir": "./logs/",
   "use_wandb": false,
   "wandb_project": "MyRLProject",
   "wandb_entity": null
