@@ -157,6 +157,14 @@ class SimpleActorCritic(BaseRLSchema):
         # Calculate Losses
         advantage = target_value - values
 
+        y_true = target_value.flatten()
+        if y_true.numel() > 1:
+            y_pred = values.flatten()
+            var_y = th.var(y_true) if th.var(y_true) > 1e-8 else 1.0
+            explained_var = 1 - th.var(y_true - y_pred) / var_y
+        else:
+            explained_var = th.tensor(0.0)
+
         actor_loss = -(log_prob * advantage.detach()).mean()
         critic_loss = F.mse_loss(values, target_value)
         entropy_loss = -th.mean(entropy)
@@ -172,3 +180,7 @@ class SimpleActorCritic(BaseRLSchema):
         self.logger.record("train/loss", total_loss.item())
         self.logger.record("train/actor_loss", actor_loss.item())
         self.logger.record("train/critic_loss", critic_loss.item())
+
+        self.logger.record("train/entropy", entropy.mean().item())
+        self.logger.record("train/value_estimate", values.mean().item())
+        self.logger.record("train/explained_variance", explained_var.item())
