@@ -2,7 +2,6 @@ from typing import Any, Dict, Optional, Type, Union
 
 import torch as th
 import torch.nn.functional as F
-import numpy as np
 
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback
 from stable_baselines3.common.policies import BasePolicy, ActorCriticPolicy, ActorCriticCnnPolicy

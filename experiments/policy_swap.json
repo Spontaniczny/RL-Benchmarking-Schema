@@ -1,0 +1,20 @@
+{
+    "experiment_name": "Policy_Size_Sweep",
+    "experiments": [
+        {
+            "env_id": "CartPole-v1",
+            "algo_class": "SimpleActorCritic",
+            "common_params": {
+                "n_envs": [4],
+                "total_timesteps": [20000],
+                "policy_type": ["SeparatedMlpPolicy"]
+            },
+            "algo_specific_params": {
+                "policy_kwargs": [
+                    {"hidden_dim": 64},
+                    {"hidden_dim": 256}
+                ]
+            }
+        }
+    ]
+}
