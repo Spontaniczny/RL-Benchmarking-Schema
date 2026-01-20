@@ -1,0 +1,13 @@
+{
+    "account": "plgYourGrantID",
+    "partition": "plgrid-gpu-a100",
+    "time": "08:00:00",
+    "mem": "32G",
+    "cpus_per_task": 4,
+    "gpus": 1,
+    "modules": [
+        "python/3.10",
+        "cuda/11.8"
+    ],
+    "wandb_mode": "offline"
+}
