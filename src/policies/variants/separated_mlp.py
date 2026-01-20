@@ -11,7 +11,7 @@ class SeparatedMlpPolicy(BaseActorCriticPolicy):
     def __init__(self, *args, **kwargs):
         # 1. Extract your custom arguments from kwargs
         # defaults to 64 if not in JSON
-        self.hidden_dim = kwargs.pop("hidden_dim", 64)
+        self.hidden_dim = kwargs.pop("hidden_dim")
 
         # 2. Call Parent Init (Crucial!)
         super().__init__(*args, **kwargs)

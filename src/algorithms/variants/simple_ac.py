@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback
 from stable_baselines3.common.policies import BasePolicy, ActorCriticPolicy, ActorCriticCnnPolicy
 from src.algorithms.base import BaseRLSchema
+from src.policies import POLICY_REGISTRY
 
 
 class SimpleActorCritic(BaseRLSchema):
@@ -14,7 +15,8 @@ class SimpleActorCritic(BaseRLSchema):
     """
     POLICY_MAPPING = {
         "MlpPolicy": ActorCriticPolicy,
-        "CnnPolicy": ActorCriticCnnPolicy
+        "CnnPolicy": ActorCriticCnnPolicy,
+        **POLICY_REGISTRY
     }
 
     def __init__(

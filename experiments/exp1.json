@@ -5,13 +5,13 @@
       "env_id": "LunarLander-v3",
       "algo_class": "SimpleActorCritic",
       "common_params": {
-        "n_envs": [1, 4, 16],
+        "n_envs": [1, 4],
         "total_timesteps": [30000],
         "policy_type": ["MlpPolicy"],
         "policy_kwargs": [{ "net_arch": [64, 64] }]
       },
       "algo_specific_params": {
-        "learning_rate": [0.001],
+        "learning_rate": [0.001, 0.0003],
         "gamma": [0.99],
         "ent_coef": [0.01]
       }

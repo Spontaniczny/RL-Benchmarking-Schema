@@ -1,18 +1,38 @@
 {
-    "experiment_name": "Policy_Size_Sweep",
+    "experiment_name": "Policy_Comparison_Strict",
     "experiments": [
         {
-            "env_id": "CartPole-v1",
+            "env_id": "LunarLander-v3",
             "algo_class": "SimpleActorCritic",
             "common_params": {
                 "n_envs": [4],
-                "total_timesteps": [20000],
-                "policy_type": ["SeparatedMlpPolicy"]
+                "total_timesteps": [100000]
             },
             "algo_specific_params": {
+                "learning_rate": [0.001],
+                "gamma": [0.99],
+                "ent_coef": [0.01],
+
+                "policy_type": ["MlpPolicy"],
+                "policy_kwargs": [{}]
+            }
+        },
+        {
+            "env_id": "LunarLander-v3",
+            "algo_class": "SimpleActorCritic",
+            "common_params": {
+                "n_envs": [4],
+                "total_timesteps": [100000]
+            },
+            "algo_specific_params": {
+                "learning_rate": [0.001],
+                "gamma": [0.99],
+                "ent_coef": [0.01],
+
+                "policy_type": ["SeparatedMlpPolicy"],
                 "policy_kwargs": [
                     {"hidden_dim": 64},
-                    {"hidden_dim": 256}
+                    {"hidden_dim": 128}
                 ]
             }
         }

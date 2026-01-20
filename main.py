@@ -16,15 +16,14 @@ def load_configurations() -> Tuple[FixedConstants, Dict[str, Any]]:
     try:
         constants = FixedConstants.from_json("config.json")
 
-        with open("experiments/exp1.json", "r") as f:
+        with open("experiments/policy_swap.json", "r") as f:
             grid_data = json.load(f)
 
         return constants, grid_data
 
     except Exception as e:
         print(f"\n[CRITICAL STARTUP ERROR]")
-        print(f"Details: {e}")
-        sys.exit(1)
+        raise e
 
 
 def generate_run_configs(experiment_data: Dict[str, Any], constants: FixedConstants) -> List[TrainConfig]:
@@ -77,8 +76,7 @@ def generate_run_configs(experiment_data: Dict[str, Any], constants: FixedConsta
 
     except KeyError as e:
         print(f"\n[CRITICAL CONFIG ERROR]")
-        print(f"Missing required parameter in grid_search.json: {e}")
-        sys.exit(1)
+        raise f"Missing required parameter in grid_search.json: {e}"
 
 
 def main():

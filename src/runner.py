@@ -2,6 +2,7 @@ import os
 import json
 import wandb
 import traceback
+import stable_baselines3
 from typing import Optional, Dict, Tuple
 
 from stable_baselines3.common.env_util import make_vec_env
@@ -13,43 +14,37 @@ from stable_baselines3.common.vec_env import VecEnv
 # Local Imports
 from config import TrainConfig
 from src.algorithms import ALGO_REGISTRY
+from src.policies import POLICY_REGISTRY
 
 
 # --- 1. Main Entry Point ---
 
 def run_single_experiment(cfg: TrainConfig) -> bool:
     """
-    Orchestrates a single experiment run.
-    Returns:
-        True if the experiment finished successfully.
-        False if it crashed or failed setup.
+    Returns True if successful, False if failed.
     """
     set_random_seed(cfg.seed)
 
-    # A. Setup (Paths, WandB, Model)
-    # If setup fails, we fail early but gracefully.
+    # A. Setup
     paths = _setup_paths(cfg)
     wandb_run = _init_wandb(cfg, paths)
     env, model = _build_env_and_model(cfg, paths)
 
     if env is None or model is None:
         _cleanup(env, wandb_run)
-        return False  # Signal failure
+        return False
 
-    # B. Execution (Training)
-    # This function catches training crashes internally.
+        # B. Execution
     success = _execute_training(model, env, cfg, paths, wandb_run)
 
     # C. Teardown
     _cleanup(env, wandb_run)
-
     return success
 
 
 # --- 2. Helper Functions ---
 
 def _setup_paths(cfg: TrainConfig) -> Dict[str, str]:
-    """Creates folders and returns the path dictionary."""
     experiment_root = os.path.join(cfg.logs_root_dir, cfg.group_name)
     run_name = cfg.run_name()
 
@@ -67,7 +62,6 @@ def _setup_paths(cfg: TrainConfig) -> Dict[str, str]:
 
 
 def _init_wandb(cfg: TrainConfig, paths: Dict[str, str]):
-    """Initializes W&B. Returns None if disabled or if it fails."""
     if not cfg.use_wandb:
         return None
     try:
@@ -89,18 +83,29 @@ def _init_wandb(cfg: TrainConfig, paths: Dict[str, str]):
 
 
 def _build_env_and_model(cfg: TrainConfig, paths: Dict[str, str]) -> Tuple[Optional[VecEnv], Optional[BaseAlgorithm]]:
-    """Builds the gym env and the model. Returns (None, None) on failure."""
     try:
+        # 1. Environment
         env = make_vec_env(cfg.env_id, n_envs=cfg.n_envs, seed=cfg.seed)
 
-        if cfg.algo_class not in ALGO_REGISTRY:
+        # 2. Algorithm Resolution
+        if cfg.algo_class in ALGO_REGISTRY:
+            AlgoClass = ALGO_REGISTRY[cfg.algo_class]
+        elif hasattr(stable_baselines3, cfg.algo_class):
+            AlgoClass = getattr(stable_baselines3, cfg.algo_class)
+        else:
             print(f"CRITICAL: Algorithm '{cfg.algo_class}' not found.")
             return None, None
 
-        AlgoClass = ALGO_REGISTRY[cfg.algo_class]
+        # 3. Policy Resolution
+        policy_id = cfg.policy_type
+        if policy_id in POLICY_REGISTRY:
+            policy_class = POLICY_REGISTRY[policy_id]
+        else:
+            policy_class = policy_id
 
+            # 4. Model Instantiation
         model = AlgoClass(
-            policy=cfg.policy_type,
+            policy=policy_class,
             env=env,
             policy_kwargs=cfg.policy_kwargs,
             tensorboard_log=paths["tb_dir"],
@@ -114,25 +119,26 @@ def _build_env_and_model(cfg: TrainConfig, paths: Dict[str, str]) -> Tuple[Optio
     except Exception as e:
         print(f"SETUP FAILED for {cfg.run_name()}")
         print(f"Error: {e}")
+        traceback.print_exc()
         return None, None
 
 
 def _execute_training(model: BaseAlgorithm, env: VecEnv, cfg: TrainConfig, paths: Dict[str, str], wandb_run) -> bool:
-    """
-    Runs the actual learning loop.
-    Returns True if successful, False if it crashed.
-    """
-    # Save params for reference
+    # 1. Save params first
     with open(paths["params_file"], "w") as f:
         json.dump(cfg.__dict__, f, indent=4, default=str)
 
+    # 2. Setup Standard Checkpoint Callback (Saves to Disk Only)
     callbacks = []
-    callbacks.append(CheckpointCallback(
-        save_freq=max(cfg.total_timesteps // 5, 1),
-        save_path=paths["model_dir"],
-        name_prefix="checkpoint",
-        save_vecnormalize=True
-    ))
+    callbacks.append(
+        CheckpointCallback(
+            save_freq=max(cfg.total_timesteps // 5, 1),
+            save_path=paths["model_dir"],
+            name_prefix="checkpoint",
+            save_vecnormalize=True,
+            verbose=cfg.verbose
+        )
+    )
 
     try:
         model.learn(
@@ -142,25 +148,31 @@ def _execute_training(model: BaseAlgorithm, env: VecEnv, cfg: TrainConfig, paths
             log_interval=1000
         )
 
-        # Save Final Model
+        # 3. Final Save
         final_path = os.path.join(paths["model_dir"], "final_model")
         model.save(final_path)
-        print(f"     SUCCESS: Saved to {final_path}.zip")
+        print(f"     SUCCESS: Training Finished.")
 
+        # 4. UPLOAD EVERYTHING (The "Batch Upload" Strategy)
         if wandb_run:
-            wandb.save(final_path + ".zip", base_path=paths["model_dir"])
-            wandb.save(paths["params_file"], base_path=paths["model_dir"])
+            print("     --> Uploading models to WandB...")
+            # This syncs the entire folder: params.json, checkpoints, final_model.zip
+            wandb.save(os.path.join(paths["model_dir"], "*"), base_path=paths["model_dir"])
 
-        return True  # <--- Return Success
+        return True
 
     except Exception:
-        # CATCH CRASH
         print(f"\n{'!' * 40}")
         print(f"!!! TRAINING CRASHED: {cfg.run_name()} !!!")
         print(f"{'!' * 40}")
-        traceback.print_exc()  # Prints detailed error
-        print(f"{'!' * 40}\n")
-        return False  # <--- Return Failure
+        traceback.print_exc()
+
+        # Optional: Attempt to upload what we have even on crash
+        if wandb_run:
+            print("     --> Attempting to upload crash artifacts...")
+            wandb.save(os.path.join(paths["model_dir"], "*"), base_path=paths["model_dir"])
+
+        return False
 
 
 def _cleanup(env: Optional[VecEnv], wandb_run) -> None:

@@ -86,10 +86,14 @@ class TrainConfig:
 
         # 1. Start with Algo
         # We removed self.env_id since it is in the parent directory
-        parts = [self.algo_class]
+        short_pol = self.policy_type.replace("Policy", "")
+        parts = [
+            self.algo_class,
+            short_pol,  # <--- ADDED THIS
+            f"env{self.n_envs}"
+        ]
 
         # 2. Add n_envs (Critical for batch size context)
-        parts.append(f"env_{self.n_envs}")
 
         # 3. Add Dynamic Params
         for k in sorted(self.algo_params.keys()):
