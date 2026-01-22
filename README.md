@@ -1,5 +1,23 @@
 # RL-Benchmarking-Schema
-RL Benchmarking Schema Project 
+You can run your own RL experiments and see them benchmarked!  
+
+It's required to have:
+- uv installed (both locally and on Athena) for our automatic virtual environment setup to work corerctly 
+    You can install it using:
+    ```python
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    ```
+
+    Verify if it's avaialable: 
+    ```python
+    uv --version
+    ```
+
+- swift (locally only) for gymnasium to work 
+    ```python
+    sudo apt update
+    sudo apt install swig
+    ```
 
 ## If you're running it locally
 Use this command in your terminal:
@@ -17,19 +35,6 @@ We highly recommend:
 You can (should) **set the paths**:
 - to your **logs** folder in `config.json` (models and TensorBoard logs)
 - to the folder where you want the **.RL_venv** file to be installed in `config_cyfronet.json`
-
-It's required to have uv installed for our automatic virtual environment setup to work corerctly. See how to set it up below.
-
-### Installing the uv package manager:
-You can install it using:
-```python
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-Verify if it's avaialable: 
-```python
-uv --version
-```
 
 ### How to use RL-Benchmarking-Schema:
 Using `submit_jobs.py` you can: 
