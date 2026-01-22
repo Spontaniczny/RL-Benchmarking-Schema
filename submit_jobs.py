@@ -7,6 +7,51 @@ from typing import Dict, Any
 from src.utils.config_loader import load_configurations, generate_run_configs
 
 
+def run_setup(slurm_cfg: Dict[str, Any]) -> None:
+    """
+    Create scratch venv + install deps using uv, using the module environment from config_cyfronet.json.
+    """
+    rl_root = slurm_cfg["venv_root_dir"]  # this is your scratch root folder
+    venv_path = os.path.join(rl_root, ".RL_venv")
+    cache_path = os.path.join(rl_root, ".uv_cache")
+
+    os.makedirs(rl_root, exist_ok=True)
+    os.makedirs(cache_path, exist_ok=True)
+
+    modules = slurm_cfg.get("modules", [])
+
+    # IMPORTANT: 'module' works only in a shell, so we run via bash -lc
+    modules_str = "\n".join([f"module load {m}" for m in modules])
+
+    cmd = f"""
+module purge
+{modules_str}
+
+export RL_ROOT="{rl_root}"
+export UV_PROJECT_ENVIRONMENT="{venv_path}"
+export UV_CACHE_DIR="{cache_path}"
+mkdir -p "{cache_path}"
+
+if [ ! -d "{venv_path}" ]; then
+  uv venv "{venv_path}"
+fi
+
+uv sync --frozen
+"""
+
+    print("==> Running setup (uv venv + uv sync --frozen) ...")
+    result = subprocess.run(["bash", "-lc", cmd], text=True)
+
+    if result.returncode != 0:
+        print(result.stdout)
+        print(result.stderr)
+        print("\nCRITICAL: Setup failed.")
+        sys.exit(1)
+
+    print(result.stdout)
+    print(f"==> Setup OK. Venv at: {venv_path}")
+
+
 def load_slurm_config(config_path: str = "config_cyfronet.json") -> Dict[str, Any]:
     """
     Loads the SLURM configuration. Fails fast if missing.
@@ -25,6 +70,7 @@ def create_slurm_script(job_name: str, cmd: str, log_dir: str, slurm_cfg: Dict[s
     """
     # 1. Generate Module Loads
     modules_str = "\n".join([f"module load {m}" for m in slurm_cfg.get("modules", [])])
+    venv_path = os.path.join(slurm_cfg["venv_root_dir"], ".RL_venv")
 
     # 2. Generate Script
     script = f"""#!/bin/bash
@@ -39,10 +85,11 @@ def create_slurm_script(job_name: str, cmd: str, log_dir: str, slurm_cfg: Dict[s
 #SBATCH --gres=gpu:{slurm_cfg['gpus']}
 
 # --- Environment Setup ---
+module purge
 {modules_str}
 
 # Activate Virtual Environment
-source .venv/bin/activate
+source {venv_path}/bin/activate
 
 # WandB Mode (Offline to prevent crashes on compute nodes)
 export WANDB_MODE={slurm_cfg.get('wandb_mode', 'offline')}
@@ -60,30 +107,55 @@ echo "WandB Mode: $WANDB_MODE"
 
 def main():
     parser = argparse.ArgumentParser(description="Submit parallel SLURM jobs.")
-    parser.add_argument("config_file", help="Path to experiment JSON")
+    parser.add_argument("config_file", nargs="?", help="Path to experiment JSON")
+    parser.add_argument("--setup-only", action="store_true", help="Create venv + install deps, then exit")
     args = parser.parse_args()
 
-    # 1. Load Configurations
+    if not args.setup_only and args.config_file is None:
+        print("CRITICAL: Missing config_file. Usage:")
+        print("  python submit_jobs.py --setup-only")
+        print("  python submit_jobs.py experiments/exp.json")
+        sys.exit(1)
+
+    # load SLURM Config
+    print(f"--> Reading SLURM settings from: config_cyfronet.json")
+    slurm_cfg = load_slurm_config()
+
+    # check if it's a run only for setting up the venv
+    if args.setup_only:
+        run_setup(slurm_cfg)
+        return
+
+    # check if the venv exists
+    venv_path = os.path.join(slurm_cfg["venv_root_dir"], ".RL_venv")
+    if not os.path.exists(os.path.join(venv_path, "bin", "activate")):
+        print(f"CRITICAL: venv not found at: {venv_path}")
+        print("Run: python submit_jobs.py --setup-only")
+        sys.exit(1)
+
+    # load experiment configurations
     print(f"--> Reading experiments from: {args.config_file}")
     constants, grid_data = load_configurations(args.config_file)
     workload = generate_run_configs(grid_data, constants)
 
-    # 2. Load SLURM Config
-    print(f"--> Reading SLURM settings from: {args.slurm_config}")
-    slurm_cfg = load_slurm_config()
+    # create SLURM outputs directory for out, err, jsons and scripts
+    slurm_root = slurm_cfg["output_dir"]
+    slurm_logs_dir = os.path.join(slurm_root, "slurm_logs")
+    single_json_dir = os.path.join(slurm_root, "single_run_json")
+    slurm_scripts_dir = os.path.join(slurm_root, "sbatch_scripts")
 
-    # 3. Create SLURM Logs Directory
-    slurm_logs_dir = os.path.join(constants.logs_root_dir, "slurm_logs")
     os.makedirs(slurm_logs_dir, exist_ok=True)
+    os.makedirs(single_json_dir, exist_ok=True)
+    os.makedirs(slurm_scripts_dir, exist_ok=True)
 
     print(f"--> Found {len(workload)} experiments to submit. Starting batch submission...")
     print("-" * 50)
 
-    # 4. Iterate and Submit
+    # iterate and submit
     for i, cfg in enumerate(workload):
-        # A. Create Single-Experiment JSON
+        # create single-experiment JSON
         single_exp_name = f"job_{i}_{cfg.run_name()}"
-        single_exp_file = os.path.join(slurm_logs_dir, f"{single_exp_name}.json")
+        single_exp_file = os.path.join(single_json_dir, f"{single_exp_name}.json")
 
         single_exp_data = {
             "experiment_name": grid_data.get("experiment_name", "Batch"),
@@ -108,17 +180,17 @@ def main():
         with open(single_exp_file, "w") as f:
             json.dump(single_exp_data, f, indent=4)
 
-        # B. Define Command
-        cmd = f"python main.py {single_exp_file}"
+        # define Command
+        cmd = f'python main.py "{single_exp_file}"'
 
-        # C. Generate SLURM Script
+        # generate SLURM Script
         slurm_content = create_slurm_script(single_exp_name, cmd, slurm_logs_dir, slurm_cfg)
-        slurm_script_path = os.path.join(slurm_logs_dir, f"{single_exp_name}.sh")
+        slurm_script_path = os.path.join(slurm_scripts_dir, f"{single_exp_name}.sh")
 
         with open(slurm_script_path, "w") as f:
             f.write(slurm_content)
 
-        # D. Submit Immediately
+        # submit to SLURM immediately using SBATCH
         try:
             result = subprocess.run(["sbatch", slurm_script_path], capture_output=True, text=True)
             if result.returncode == 0:

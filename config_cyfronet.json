@@ -1,13 +1,16 @@
 {
-    "account": "plgYourGrantID",
+    "account": "<your-grant-account>",
     "partition": "plgrid-gpu-a100",
-    "time": "08:00:00",
+    "time": "00:30:00",
     "mem": "32G",
     "cpus_per_task": 4,
     "gpus": 1,
     "modules": [
-        "python/3.10",
-        "cuda/11.8"
+        "GCCcore/14.2.0",
+        "Python/3.13.1",
+        "SWIG/4.3.1"
     ],
-    "wandb_mode": "offline"
+    "wandb_mode": "offline",
+    "venv_root_dir": "/net/tscratch/people/<username>/<project_folder>",
+    "output_dir": "/net/tscratch/people/<username>/<project_folder>/slurm_out"
 }

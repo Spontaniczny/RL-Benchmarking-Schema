@@ -2,7 +2,7 @@
   "seed": 42,
   "device": "cpu",
   "verbose": 1,
-  "logs_root_dir": "./logs/",
+  "logs_root_dir": "/net/tscratch/people/<username>/<project_folder>/logs", 
   "use_wandb": false,
   "wandb_project": "MyRLProject",
   "wandb_entity": null
