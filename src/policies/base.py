@@ -14,10 +14,8 @@ class AdapterMlpExtractor(nn.Module):
 
     def __init__(self, modules_dict: nn.ModuleDict):
         super().__init__()
-        # We register the dict so PyTorch sees the weights
         self.net_dict = modules_dict
 
-        # We create easy references for the forward pass
         self.policy_net = modules_dict["policy_net"]
         self.value_net = modules_dict["value_net"]
 
@@ -46,31 +44,21 @@ class BaseActorCriticPolicy(ActorCriticPolicy, ABC):
         Overrides SB3's default builder.
         Delegates creation to 'build_custom_arch' and fixes SB3 compatibility.
         """
-        # 1. Build the custom network
         raw_arch = self.build_custom_arch()
 
-        # 2. VALIDATION
         if not isinstance(raw_arch, nn.ModuleDict):
             raise TypeError("build_custom_arch() must return an nn.ModuleDict")
         if "policy_net" not in raw_arch or "value_net" not in raw_arch:
             raise ValueError("Returned ModuleDict must contain 'policy_net' and 'value_net' keys.")
 
-        # 3. CRITICAL FIX for SB3 Compatibility
-        # SB3 expects the extractor to tell it the output size of the last layer
-        # so it can build the final Action/Value heads.
 
-        # We assume the user defined these attributes in their build function.
-        # If not, we try to guess or raise an error.
         if not hasattr(raw_arch, "latent_dim_pi"):
             raise AttributeError("Your custom network must have a 'latent_dim_pi' attribute set.")
         if not hasattr(raw_arch, "latent_dim_vf"):
             raise AttributeError("Your custom network must have a 'latent_dim_vf' attribute set.")
 
-        # 4. WRAP IT (The Fix)
-        # We wrap the dictionary in our callable Adapter
         self.mlp_extractor = AdapterMlpExtractor(raw_arch)
 
-        # 5. Copy the size attributes so SB3 can read them from the wrapper
         self.mlp_extractor.latent_dim_pi = raw_arch.latent_dim_pi
         self.mlp_extractor.latent_dim_vf = raw_arch.latent_dim_vf
 

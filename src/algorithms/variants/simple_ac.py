@@ -29,6 +29,7 @@ class SimpleActorCritic(BaseRLSchema):
             verbose: int,
             device: Union[th.device, str],
             seed: int,
+
             # Custom Hyperparameters below
             gamma: float,
             ent_coef: float,
@@ -49,7 +50,6 @@ class SimpleActorCritic(BaseRLSchema):
         self.gamma = gamma
         self.ent_coef = ent_coef
 
-        # Initialize internal structures
         if kwargs.get("_init_setup_model", True):
             self._setup_model()
 
@@ -57,7 +57,6 @@ class SimpleActorCritic(BaseRLSchema):
         self._setup_lr_schedule()
         self.set_random_seed(self.seed)
 
-        # Initialize the Policy using SB3's factory
         self.policy = self.policy_class(
             self.observation_space,
             self.action_space,
@@ -87,29 +86,23 @@ class SimpleActorCritic(BaseRLSchema):
 
         callback.on_training_start(locals(), globals())
 
-        # Reset Env
         obs = self.env.reset()
 
         last_log_time = 0
 
         while self.num_timesteps < total_timesteps:
-            # 1. Select Action
             with th.no_grad():
-                # Convert obs to tensor
                 obs_tensor = th.as_tensor(obs).to(self.device)
                 actions, values, log_probs = self.policy(obs_tensor)
 
             actions = actions.cpu().numpy()
 
-            # 2. Step Env
             new_obs, rewards, dones, infos = self.env.step(actions)
 
             for info in infos:
                 if "episode" in info:
                     self.ep_info_buffer.extend([info["episode"]])
 
-            # 3. Store transition (In a real algo, use a Buffer)
-            # For this simple example, we train immediately on the single step (Online)
             self.current_transition = {
                 "obs": obs_tensor,
                 "action": th.as_tensor(actions).to(self.device),
@@ -120,10 +113,8 @@ class SimpleActorCritic(BaseRLSchema):
 
             self.num_timesteps += self.env.num_envs
 
-            # 4. Train
             self.train()
 
-            # 5. Callbacks & Logging
             callback.on_step()
 
             if log_interval is not None and (self.num_timesteps - last_log_time >= log_interval):
@@ -141,28 +132,22 @@ class SimpleActorCritic(BaseRLSchema):
         """
         self.policy.set_training_mode(True)
 
-        # Unpack data
         data = self.current_transition
         obs = data["obs"]
         next_obs = data["next_obs"]
         reward = data["reward"]
         done = data["done"]
 
-        # Forward Pass
-        # We need values and log_probs for the specific actions taken
-        # (Simplified for demonstration)
         values, log_prob, entropy = self.policy.evaluate_actions(obs, data["action"])
 
         values = values.flatten()
 
-        # Bootstrapping (Next Value)
         with th.no_grad():
             _, next_values, _ = self.policy(next_obs)
             next_values = next_values.flatten()
 
             target_value = reward + (1 - done.float()) * self.gamma * next_values
 
-        # Calculate Losses
         advantage = target_value - values
 
         y_true = target_value.flatten()
@@ -181,12 +166,10 @@ class SimpleActorCritic(BaseRLSchema):
 
         total_loss = actor_loss + 0.5 * critic_loss + self.ent_coef * entropy_loss
 
-        # Optimization
         self.optimizer.zero_grad()
         total_loss.backward()
         self.optimizer.step()
 
-        # Log
         self.logger.record("train/loss", total_loss.item())
         self.logger.record("train/actor_loss", actor_loss.item())
         self.logger.record("train/critic_loss", critic_loss.item())

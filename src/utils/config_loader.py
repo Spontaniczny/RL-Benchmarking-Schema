@@ -50,8 +50,6 @@ def generate_run_configs(experiment_data: Dict[str, Any], constants: FixedConsta
             combinations = [dict(zip(keys, v)) for v in itertools.product(*values)]
 
             for params in combinations:
-                # STRICT EXTRACTION
-                # If these keys are missing in JSON, we want to know NOW.
                 total_timesteps = params.pop("total_timesteps")
                 policy_type = params.pop("policy_type")
                 policy_kwargs = params.pop("policy_kwargs")

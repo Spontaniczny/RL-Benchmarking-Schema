@@ -17,15 +17,12 @@ from src.algorithms import ALGO_REGISTRY
 from src.policies import POLICY_REGISTRY
 
 
-# --- 1. Main Entry Point ---
-
 def run_single_experiment(cfg: TrainConfig) -> bool:
     """
     Returns True if successful, False if failed.
     """
     set_random_seed(cfg.seed)
 
-    # A. Setup
     paths = _setup_paths(cfg)
     wandb_run = _init_wandb(cfg, paths)
     env, model = _build_env_and_model(cfg, paths)
@@ -34,15 +31,12 @@ def run_single_experiment(cfg: TrainConfig) -> bool:
         _cleanup(env, wandb_run)
         return False
 
-        # B. Execution
     success = _execute_training(model, env, cfg, paths, wandb_run)
 
-    # C. Teardown
     _cleanup(env, wandb_run)
     return success
 
 
-# --- 2. Helper Functions ---
 
 def _setup_paths(cfg: TrainConfig) -> Dict[str, str]:
     experiment_root = os.path.join(cfg.logs_root_dir, cfg.group_name)
@@ -84,10 +78,8 @@ def _init_wandb(cfg: TrainConfig, paths: Dict[str, str]):
 
 def _build_env_and_model(cfg: TrainConfig, paths: Dict[str, str]) -> Tuple[Optional[VecEnv], Optional[BaseAlgorithm]]:
     try:
-        # 1. Environment
         env = make_vec_env(cfg.env_id, n_envs=cfg.n_envs, seed=cfg.seed)
 
-        # 2. Algorithm Resolution
         if cfg.algo_class in ALGO_REGISTRY:
             AlgoClass = ALGO_REGISTRY[cfg.algo_class]
         elif hasattr(stable_baselines3, cfg.algo_class):
@@ -96,14 +88,12 @@ def _build_env_and_model(cfg: TrainConfig, paths: Dict[str, str]) -> Tuple[Optio
             print(f"CRITICAL: Algorithm '{cfg.algo_class}' not found.")
             return None, None
 
-        # 3. Policy Resolution
         policy_id = cfg.policy_type
         if policy_id in POLICY_REGISTRY:
             policy_class = POLICY_REGISTRY[policy_id]
         else:
             policy_class = policy_id
 
-            # 4. Model Instantiation
         model = AlgoClass(
             policy=policy_class,
             env=env,
@@ -124,11 +114,9 @@ def _build_env_and_model(cfg: TrainConfig, paths: Dict[str, str]) -> Tuple[Optio
 
 
 def _execute_training(model: BaseAlgorithm, env: VecEnv, cfg: TrainConfig, paths: Dict[str, str], wandb_run) -> bool:
-    # 1. Save params first
     with open(paths["params_file"], "w") as f:
         json.dump(cfg.__dict__, f, indent=4, default=str)
 
-    # 2. Setup Standard Checkpoint Callback (Saves to Disk Only)
     callbacks = []
     callbacks.append(
         CheckpointCallback(
@@ -148,12 +136,10 @@ def _execute_training(model: BaseAlgorithm, env: VecEnv, cfg: TrainConfig, paths
             log_interval=1000
         )
 
-        # 3. Final Save
         final_path = os.path.join(paths["model_dir"], "final_model")
         model.save(final_path)
         print(f"     SUCCESS: Training Finished.")
 
-        # 4. UPLOAD EVERYTHING (The "Batch Upload" Strategy)
         if wandb_run:
             print("     --> Uploading models to WandB...")
             # This syncs the entire folder: params.json, checkpoints, final_model.zip
@@ -167,7 +153,6 @@ def _execute_training(model: BaseAlgorithm, env: VecEnv, cfg: TrainConfig, paths
         print(f"{'!' * 40}")
         traceback.print_exc()
 
-        # Optional: Attempt to upload what we have even on crash
         if wandb_run:
             print("     --> Attempting to upload crash artifacts...")
             wandb.save(os.path.join(paths["model_dir"], "*"), base_path=paths["model_dir"])

@@ -32,11 +32,9 @@ class BaseRLSchema(BaseAlgorithm, ABC):
             **kwargs
     ):
         if isinstance(policy, str):
-            # Check if the string exists in the child class's mapping
             if policy in self.POLICY_MAPPING:
                 policy = self.POLICY_MAPPING[policy]
             else:
-                # Helpful error message if user forgot to define it
                 raise ValueError(
                     f"Policy '{policy}' is not defined in {self.__class__.__name__}.POLICY_MAPPING.\n"
                     f"Available options: {list(self.POLICY_MAPPING.keys())}"
@@ -54,7 +52,6 @@ class BaseRLSchema(BaseAlgorithm, ABC):
             support_multi_env=support_multi_env,
             **kwargs
         )
-        # Initialize to 0 to satisfy static analysis, though _setup_learn will overwrite it
         self.start_num_timesteps = 0
 
     def _setup_learn(
@@ -69,7 +66,6 @@ class BaseRLSchema(BaseAlgorithm, ABC):
         Overriding _setup_learn to capture the starting timestep.
         This fixes the 'Unresolved attribute' error in dump_logs.
         """
-        # Run the standard SB3 setup (initializes start_time, logger, etc.)
         total_timesteps, callback = super()._setup_learn(
             total_timesteps,
             callback,
@@ -78,7 +74,6 @@ class BaseRLSchema(BaseAlgorithm, ABC):
             progress_bar,
         )
 
-        # Capture the timestep we are starting from (0 for new runs, N for resumed)
         self.start_num_timesteps = self.num_timesteps
         return total_timesteps, callback
 
@@ -86,7 +81,6 @@ class BaseRLSchema(BaseAlgorithm, ABC):
         """
         Write log data to file/console.
         """
-        # Calculate time elapsed since training started (avoid division by zero)
         time_elapsed = max((time.time_ns() - self.start_time) / 1e9, sys.float_info.epsilon)
 
         # Calculate FPS based on steps taken THIS session
@@ -102,7 +96,6 @@ class BaseRLSchema(BaseAlgorithm, ABC):
         self.logger.record("time/time_elapsed", int(time_elapsed), exclude="tensorboard")
         self.logger.record("time/total_timesteps", self.num_timesteps, exclude="tensorboard")
 
-        # Dump logs
         self.logger.dump(step=self.num_timesteps)
 
     @abstractmethod
